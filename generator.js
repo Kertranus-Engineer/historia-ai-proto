@@ -1,100 +1,210 @@
 // generator.js
 const POOLS = {
   supervivencia: {
-    eventos: [
-      "encuentras agua turbia",
-      "ves humo a lo lejos",
-      "escuchas ramas romperse",
-      "una puerta bloqueada te frena",
-      "hallazgo: una mochila abandonada"
-    ],
-    amenazas: ["un perro salvaje", "una persona armada", "un incendio cercano", "una caída peligrosa"]
+    objetivos: ["encontrar refugio", "conseguir agua limpia", "salir del perímetro"],
+    eventos: {
+      setup: ["encuentras huellas recientes", "ves humo a lo lejos", "hallazgo: una mochila abandonada"],
+      complica: ["tu ruta queda bloqueada", "escuchas pasos siguiéndote", "hallazgo: una navaja oxidada"],
+      climax: ["te rodean", "un incendio te corta el paso", "te descubren"],
+      resuelve: ["divisas una salida", "encuentras un refugio", "llegas a un camino seguro"]
+    },
+    amenazas: ["un perro salvaje", "una persona armada", "una caída peligrosa"]
   },
+
   horror: {
-    eventos: [
-      "una sombra cruza sin hacer ruido",
-      "un susurro repite tu nombre",
-      "un olor podrido aparece de golpe",
-      "algo raspa por dentro de una pared",
-      "hallazgo: una foto tuya que no recuerdas"
-    ],
-    amenazas: ["algo invisible", "una figura inmóvil", "un chillido detrás", "un reflejo que no coincide"]
+    objetivos: ["romper la maldición", "encontrar la fuente del susurro", "salir antes del anochecer"],
+    eventos: {
+      setup: ["un susurro repite tu nombre", "una sombra cruza sin ruido", "hallazgo: una vela negra"],
+      complica: ["algo raspa desde dentro", "un reflejo no coincide", "hallazgo: sal bendita"],
+      climax: ["la figura se acerca", "se apagan los sonidos", "tu miedo se materializa"],
+      resuelve: ["la presión baja", "la luz vuelve", "el susurro se aleja"]
+    },
+    amenazas: ["algo invisible", "una figura inmóvil", "un chillido detrás"]
   },
+
   "ciencia ficcion": {
-    eventos: [
-      "un pitido intermitente guía tu atención",
-      "ves un dron caído aún encendido",
-      "una pantalla muestra símbolos",
-      "tu sombra se duplica por un segundo",
-      "hallazgo: un módulo con puerto extraño"
-    ],
-    amenazas: ["un láser de rastreo", "un campo eléctrico", "un robot patrulla", "una alarma automática"]
+    objetivos: ["restablecer la señal", "activar el módulo", "evitar el rastreo"],
+    eventos: {
+      setup: ["un pitido intermitente guía tu atención", "ves un dron caído", "hallazgo: batería intacta"],
+      complica: ["una alarma automática se enciende", "un campo eléctrico bloquea", "hallazgo: llave magnética"],
+      climax: ["el sistema te marca", "aparecen drones", "un láser de rastreo te fija"],
+      resuelve: ["la señal se estabiliza", "la alarma se apaga", "encuentras un túnel de servicio"]
+    },
+    amenazas: ["un robot patrulla", "un láser de rastreo", "una alarma automática"]
   },
+
   fantasia: {
-    eventos: [
-      "una runa brilla en el suelo",
-      "la niebla forma un rostro",
-      "un cuervo habla en susurros",
-      "una linterna se enciende sola",
-      "hallazgo: una moneda marcada"
-    ],
-    amenazas: ["un espectro", "una bestia", "un hechizo fallido", "un guardián antiguo"]
+    objetivos: ["hallar el símbolo", "sellar el portal", "recuperar el amuleto"],
+    eventos: {
+      setup: ["una runa brilla en el suelo", "la niebla forma un rostro", "hallazgo: moneda marcada"],
+      complica: ["un guardián te observa", "la magia distorsiona el camino", "hallazgo: polvo de hada"],
+      climax: ["un espectro se abalanza", "el portal late", "un hechizo falla y explota"],
+      resuelve: ["la runa se apaga", "el portal se estabiliza", "un sendero aparece"]
+    },
+    amenazas: ["un espectro", "un guardián antiguo", "una bestia"]
   }
 };
 
-function pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+
+function faseNombre(fase) {
+  if (fase === 0) return "setup";
+  if (fase === 1) return "complica";
+  if (fase === 2) return "climax";
+  return "resuelve";
 }
 
-function clamp(n, a, b) {
-  return Math.max(a, Math.min(b, n));
+function getPool(perfil) {
+  const g = perfil.genero || "supervivencia";
+  return POOLS[g] || POOLS.supervivencia;
+}
+
+function ensureObjetivo(estado, pool) {
+  if (!estado.objetivo) estado.objetivo = pick(pool.objetivos);
+}
+
+function avanzarFase(estado) {
+  // 0-2, 3-6, 7-9, 10+
+  if (estado.turno >= 10) estado.fase = 3;
+  else if (estado.turno >= 7) estado.fase = 2;
+  else if (estado.turno >= 3) estado.fase = 1;
+  else estado.fase = 0;
+}
+
+function eventoConNoRepetir(estado, pool, faseKey) {
+  const opciones = pool.eventos[faseKey];
+  if (!opciones?.length) return "pasa algo extraño.";
+
+  const last = estado.flags?.lastEvento || null;
+  let e = pick(opciones);
+  if (last && e === last && opciones.length > 1) {
+    e = pick(opciones.filter(x => x !== last));
+  }
+  estado.flags.lastEvento = e;
+  return e;
+}
+
+function parseHallazgo(texto) {
+  const prefix = "hallazgo:";
+  if (!texto.toLowerCase().startsWith(prefix)) return null;
+  return texto.slice(prefix.length).trim();
+}
+
+function opcionesBase({ estado, perfil, pool, amenaza, riesgo }) {
+  const ops = [];
+
+  // Investigar => sube misterio, puede dar item
+  ops.push({
+    texto: "Investigar",
+    impacto: { misterio: +1, tension: +riesgo },
+    efecto: (s) => {
+      // chance de item si evento fue hallazgo
+      const last = s.flags.lastEvento || "";
+      const item = parseHallazgo(last);
+      if (item && !s.inventario.includes(item)) {
+        s.inventario.push(item);
+        s.flags.ultimoItem = item;
+        pushFlag(s, `Obtuviste: ${item}`);
+      }
+    }
+  });
+
+  // Cautela => baja tensión
+  ops.push({
+    texto: "Moverte con cuidado",
+    impacto: { tension: -1 }
+  });
+
+  // Valentía => sube valor, puede costar salud si riesgo
+  ops.push({
+    texto: "Actuar con valentía",
+    impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
+  });
+
+  // Opción condicional por inventario/flags
+  if (estado.inventario.includes("sal bendita")) {
+    ops.push({
+      texto: "Usar sal bendita",
+      impacto: { tension: -2, misterio: +1 },
+      consume: "sal bendita"
+    });
+  }
+
+  if (estado.inventario.includes("llave magnética")) {
+    ops.push({
+      texto: "Abrir una compuerta con la llave",
+      impacto: { misterio: +1, tension: -1, valor: +1 },
+      flagSet: "compuerta_abierta"
+    });
+  }
+
+  if (perfil.tono === "comico") {
+    ops.push({
+      texto: "Hacerte el chistoso para calmarte",
+      impacto: { tension: -1, moralidad: +1 }
+    });
+  }
+
+  // recorta a 2-4 opciones
+  return recortar(ops, 4);
+}
+
+function recortar(arr, max) {
+  // asegura variedad: mezcla y corta
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, max);
+}
+
+function pushFlag(estado, texto) {
+  estado.flags.log = estado.flags.log || [];
+  estado.flags.log.push(texto);
+  if (estado.flags.log.length > 8) estado.flags.log.shift();
 }
 
 export function generarEscena({ estado, perfil, datosUsuario }) {
-  const genero = perfil.genero || "supervivencia";
-  const pool = POOLS[genero] || POOLS.supervivencia;
+  const pool = getPool(perfil);
+  ensureObjetivo(estado, pool);
 
-  const evento = pick(pool.eventos);
-  const amenaza = pick(pool.amenazas);
+  estado.turno = (estado.turno ?? 0) + 1;
+  avanzarFase(estado);
 
-  // intensidad afecta riesgo
+  const faseKey = faseNombre(estado.fase);
+
   const i = Number(perfil.intensidad ?? 6);
   const riesgo = i >= 8 ? 2 : i <= 3 ? 0 : 1;
 
-  // usa memoria para continuidad ligera
+  const amenaza = pick(pool.amenazas);
+  const evento = eventoConNoRepetir(estado, pool, faseKey);
+
   const memoria = estado.memoria?.slice(-2).join(" | ") || "vacía";
+  const logFlags = (estado.flags?.log || []).slice(-2).join(" | ");
 
   const texto =
-`${perfil.tono === "comico" ? "Ok, esto es ridículo, pero..." : ""}
-Estás en ${datosUsuario.lugar}.
-Ocurre algo: ${evento}.
-Sientes que ${amenaza} podría estar cerca.
-Tu miedo (${datosUsuario.miedo}) asoma, pero piensas en ${datosUsuario.deseo}.
+`${perfil.tono === "oscuro" ? "La luz parece enferma." : ""}
+Estás en ${datosUsuario.lugar}. Objetivo: ${estado.objetivo}.
+Fase: ${faseKey.toUpperCase()}.
+
+Ocurre: ${evento}.
+Sientes que ${amenaza} está cerca.
+Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.
 
 Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
+Inventario: ${estado.inventario.join(", ") || "vacío"}
+Flags: ${logFlags || "ninguna"}
 Memoria: ${memoria}`;
 
-  // Opciones coherentes
-  const opciones = [
-    {
-      texto: "Investigar",
-      impacto: { misterio: +1, tension: +riesgo }
-    },
-    {
-      texto: "Moverte con cuidado",
-      impacto: { tension: -1 }
-    },
-    {
-      texto: "Actuar con valentía",
-      impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
-    }
-  ];
+  let opciones = opcionesBase({ estado, perfil, pool, amenaza, riesgo });
 
-  // Ajustes/clamps post
+  // normaliza impactos
   opciones.forEach(o => {
-    if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -2, +3);
+    o.impacto = o.impacto || {};
+    if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
     if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
+    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
+    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
+    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
   });
 
-  return { texto, opciones };
+  return { texto, opciones, meta: { faseKey, evento, amenaza, riesgo } };
 }
