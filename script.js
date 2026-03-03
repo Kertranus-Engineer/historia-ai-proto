@@ -1,3 +1,6 @@
+document.getElementById("btnComenzar").addEventListener("click", () => {
+    alert("FUNCIONA");
+});
 import {
   crearPerfil,
   crearEstadoInicial,
@@ -354,4 +357,5 @@ window.addEventListener("DOMContentLoaded", () => {
       if (inx) inx.value = p.intensidad;
     } catch {}
   }
+
 });
