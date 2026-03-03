@@ -2,43 +2,41 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Historia IA Prototipo</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
   <div class="container">
     <h1>Tu Historia Comienza</h1>
 
     <div id="intro" class="card">
       <p>Responde breve (o déjalo vacío):</p>
 
+      <input id="lugar" placeholder="Un lugar que te guste (ej: El campo)" />
+      <input id="miedo" placeholder="Un miedo (ej: Arañas)" />
+      <input id="deseo" placeholder="Algo que deseas (ej: Ser feliz)" />
 
-      <input id="lugar" placeholder="Un lugar que te guste (ej: El campo)">
-      <input id="miedo" placeholder="Un miedo (ej: Chocar conduciendo)">
-      <input id="deseo" placeholder="Algo que deseas (ej: Ser feliz)">
+      <hr style="margin:20px 0; opacity:.2" />
 
-<hr style="margin:20px 0; opacity:.2">
+      <select id="genero">
+        <option value="supervivencia">Supervivencia</option>
+        <option value="horror">Horror</option>
+        <option value="ciencia ficcion">Ciencia ficción</option>
+        <option value="fantasia">Fantasía</option>
+      </select>
 
-<select id="genero">
-  <option value="supervivencia">Supervivencia</option>
-  <option value="horror">Horror</option>
-  <option value="ciencia ficcion">Ciencia ficción</option>
-  <option value="fantasia">Fantasía</option>
-</select>
+      <select id="tono">
+        <option value="tenso">Tenso</option>
+        <option value="oscuro">Oscuro</option>
+        <option value="esperanzador">Esperanzador</option>
+        <option value="comico">Cómico</option>
+      </select>
 
-<select id="tono">
-  <option value="tenso">Tenso</option>
-  <option value="oscuro">Oscuro</option>
-  <option value="esperanzador">Esperanzador</option>
-  <option value="comico">Cómico</option>
-</select>
+      <label for="intensidad">Intensidad (1-10)</label>
+      <input type="range" id="intensidad" min="1" max="10" value="6" />
 
-<label>Intensidad (1-10)</label>
-<input type="range" id="intensidad" min="1" max="10" value="6">
       <button id="btnComenzar">Comenzar</button>
-
       <p class="hint">Si no funciona: F12 → Console (verás el error).</p>
     </div>
 
@@ -49,9 +47,6 @@
     </div>
   </div>
 
-
-  <!-- IMPORTANTE: el script al final -->
   <script type="module" src="script.js"></script>
 </body>
-
 </html>
