@@ -4,13 +4,25 @@ export function crearPerfil({ genero, tono, intensidad, protagonista, tema }) {
 
 export function crearEstadoInicial() {
   return {
-    escena: 1,
+    // progreso narrativo
+    turno: 0,          // cuántas decisiones llevas
+    fase: 0,           // 0=setup,1=complica,2=climax,3=resuelve
+    objetivo: null,    // string
+    logrado: false,
+
+    // stats
     salud: 3,
     tension: 0,
     misterio: 0,
     moralidad: 0,
     valor: 0,
+
+    // mundo
     inventario: [],
+    flags: {},         // cosas que “pasaron”
+    cooldown: {},      // para no repetir eventos
+
+    // memoria
     memoria: []
   };
 }
@@ -41,3 +53,4 @@ export function aplicarImpacto(estado, impacto = {}) {
   // clamp básico
   estado.salud = Math.max(0, Math.min(3, estado.salud));
 }
+
