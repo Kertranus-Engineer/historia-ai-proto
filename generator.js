@@ -60,7 +60,7 @@ function faseNombre(fase) {
 }
 
 function getPool(perfil) {
-  const g = perfil.genero || "supervivencia";
+  const g = (perfil?.genero || "supervivencia").toLowerCase();
   return POOLS[g] || POOLS.supervivencia;
 }
 
@@ -69,6 +69,7 @@ function ensureObjetivo(estado, pool) {
 }
 
 function avanzarFase(estado) {
+  // 0-2, 3-6, 7-9, 10+
   if (estado.turno >= 10) estado.fase = 3;
   else if (estado.turno >= 7) estado.fase = 2;
   else if (estado.turno >= 3) estado.fase = 1;
@@ -79,22 +80,26 @@ function eventoConNoRepetir(estado, pool, faseKey) {
   const opciones = pool.eventos[faseKey];
   if (!opciones?.length) return "pasa algo extraño.";
 
-  const last = estado.flags?.lastEvento || null;
+  estado.flags = estado.flags || {};
+  const last = estado.flags.lastEvento || null;
+
   let e = pick(opciones);
   if (last && e === last && opciones.length > 1) {
     e = pick(opciones.filter(x => x !== last));
   }
+
   estado.flags.lastEvento = e;
   return e;
 }
 
 function parseHallazgo(texto) {
   const prefix = "hallazgo:";
-  if (!texto.toLowerCase().startsWith(prefix)) return null;
+  if (!texto || !texto.toLowerCase().startsWith(prefix)) return null;
   return texto.slice(prefix.length).trim();
 }
 
 function pushFlag(estado, texto) {
+  estado.flags = estado.flags || {};
   estado.flags.log = estado.flags.log || [];
   estado.flags.log.push(texto);
   if (estado.flags.log.length > 8) estado.flags.log.shift();
@@ -102,13 +107,13 @@ function pushFlag(estado, texto) {
 
 function eventoGlobalAleatorio(estado) {
   if (!eventos?.length) return null;
-  // 50% de chance de evento global en cada turno
-  if (Math.random() > 0.5) return null;
+  if (Math.random() > 0.5) return null; // 50%
 
   const e = pick(eventos);
   try {
     if (typeof e.efecto === "function") e.efecto(estado);
   } catch {}
+
   return e.texto || null;
 }
 
@@ -124,13 +129,16 @@ function opcionesBase({ estado, perfil, riesgo }) {
     texto: "Investigar",
     impacto: { misterio: +1, tension: +riesgo },
     efecto: (s) => {
+      s.flags = s.flags || {};
+      s.inventario = s.inventario || [];
+
       const last = s.flags.lastEvento || "";
       const itemHallazgo = parseHallazgo(last);
+
       if (itemHallazgo && !s.inventario.includes(itemHallazgo)) {
         s.inventario.push(itemHallazgo);
         pushFlag(s, `Obtuviste: ${itemHallazgo}`);
       } else {
-        // chance de objeto genérico
         if (Math.random() < 0.35) {
           const obj = pick(OBJETOS);
           if (!s.inventario.includes(obj)) {
@@ -152,8 +160,8 @@ function opcionesBase({ estado, perfil, riesgo }) {
     impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
   });
 
-  // Opciones condicionales por inventario
-  if (estado.inventario.includes("botiquín")) {
+  // Condicionales inventario
+  if ((estado.inventario || []).includes("botiquín")) {
     ops.push({
       texto: "Usar botiquín",
       impacto: { salud: +1, tension: -1 },
@@ -161,7 +169,7 @@ function opcionesBase({ estado, perfil, riesgo }) {
     });
   }
 
-  if (estado.inventario.includes("sensor alienígena")) {
+  if ((estado.inventario || []).includes("sensor alienígena")) {
     ops.push({
       texto: "Escanear el entorno",
       impacto: { misterio: +2, tension: +1 },
@@ -169,7 +177,7 @@ function opcionesBase({ estado, perfil, riesgo }) {
     });
   }
 
-  if (estado.inventario.includes("llave antigua") || estado.inventario.includes("llave magnética")) {
+  if ((estado.inventario || []).includes("llave antigua") || (estado.inventario || []).includes("llave magnética")) {
     ops.push({
       texto: "Forzar una puerta con la llave",
       impacto: { misterio: +1, valor: +1, tension: -1 },
@@ -189,6 +197,9 @@ function opcionesBase({ estado, perfil, riesgo }) {
 
 export function generarEscena({ estado, perfil, datosUsuario }) {
   const pool = getPool(perfil);
+
+  estado.flags = estado.flags || {};
+  estado.inventario = estado.inventario || [];
   ensureObjetivo(estado, pool);
 
   estado.turno = (estado.turno ?? 0) + 1;
@@ -202,20 +213,22 @@ export function generarEscena({ estado, perfil, datosUsuario }) {
   const amenaza = pick(pool.amenazas);
   const eventoLocal = eventoConNoRepetir(estado, pool, faseKey);
 
-  // Evento global (desde events.js) que puede alterar estado
   const eventoGlobal = eventoGlobalAleatorio(estado);
 
   const memoria = estado.memoria?.slice(-2).join(" | ") || "vacía";
   const logFlags = (estado.flags?.log || []).slice(-2).join(" | ");
 
+  const lugar = (datosUsuario?.lugar || "un lugar desconocido").trim();
+  const miedo = (datosUsuario?.miedo || "algo").trim();
+  const deseo = (datosUsuario?.deseo || "seguir").trim();
+
   let texto =
-`${perfil.tono === "oscuro" ? "La luz parece enferma." : ""}
-Estás en ${datosUsuario.lugar}. Objetivo: ${estado.objetivo}.
+`${perfil.tono === "oscuro" ? "La luz parece enferma.\n" : ""}Estás en ${lugar}. Objetivo: ${estado.objetivo}.
 Fase: ${faseKey.toUpperCase()}.
 
 Ocurre: ${eventoLocal}.
 Sientes que ${amenaza} está cerca.
-Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.`;
+Tu miedo (${miedo}) aparece, pero piensas en ${deseo}.`;
 
   if (eventoGlobal) {
     texto += `\n\nEVENTO EXTRA: ${eventoGlobal}.`;
@@ -225,7 +238,7 @@ Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.
   texto += `
 
 Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
-Inventario: ${estado.inventario.join(", ") || "vacío"}
+Inventario: ${(estado.inventario || []).join(", ") || "vacío"}
 Flags: ${logFlags || "ninguna"}
 Memoria: ${memoria}`;
 
@@ -236,164 +249,4 @@ Memoria: ${memoria}`;
     o.impacto = o.impacto || {};
     if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
     if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
-    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
-    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
-    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
-  });
-
-  return {
-    texto,
-    opciones,
-    meta: { faseKey, evento: eventoLocal, amenaza, riesgo, eventoGlobal }
-  };
-}  return POOLS[g] || POOLS.supervivencia;
-}
-
-function ensureObjetivo(estado, pool) {
-  if (!estado.objetivo) estado.objetivo = pick(pool.objetivos);
-}
-
-function avanzarFase(estado) {
-  // 0-2, 3-6, 7-9, 10+
-  if (estado.turno >= 10) estado.fase = 3;
-  else if (estado.turno >= 7) estado.fase = 2;
-  else if (estado.turno >= 3) estado.fase = 1;
-  else estado.fase = 0;
-}
-
-function eventoConNoRepetir(estado, pool, faseKey) {
-  const opciones = pool.eventos[faseKey];
-  if (!opciones?.length) return "pasa algo extraño.";
-
-  const last = estado.flags?.lastEvento || null;
-  let e = pick(opciones);
-  if (last && e === last && opciones.length > 1) {
-    e = pick(opciones.filter(x => x !== last));
-  }
-  estado.flags.lastEvento = e;
-  return e;
-}
-
-function parseHallazgo(texto) {
-  const prefix = "hallazgo:";
-  if (!texto.toLowerCase().startsWith(prefix)) return null;
-  return texto.slice(prefix.length).trim();
-}
-
-function opcionesBase({ estado, perfil, pool, amenaza, riesgo }) {
-  const ops = [];
-
-  // Investigar => sube misterio, puede dar item
-  ops.push({
-    texto: "Investigar",
-    impacto: { misterio: +1, tension: +riesgo },
-    efecto: (s) => {
-      // chance de item si evento fue hallazgo
-      const last = s.flags.lastEvento || "";
-      const item = parseHallazgo(last);
-      if (item && !s.inventario.includes(item)) {
-        s.inventario.push(item);
-        s.flags.ultimoItem = item;
-        pushFlag(s, `Obtuviste: ${item}`);
-      }
-    }
-  });
-
-  // Cautela => baja tensión
-  ops.push({
-    texto: "Moverte con cuidado",
-    impacto: { tension: -1 }
-  });
-
-  // Valentía => sube valor, puede costar salud si riesgo
-  ops.push({
-    texto: "Actuar con valentía",
-    impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
-  });
-
-  // Opción condicional por inventario/flags
-  if (estado.inventario.includes("sal bendita")) {
-    ops.push({
-      texto: "Usar sal bendita",
-      impacto: { tension: -2, misterio: +1 },
-      consume: "sal bendita"
-    });
-  }
-
-  if (estado.inventario.includes("llave magnética")) {
-    ops.push({
-      texto: "Abrir una compuerta con la llave",
-      impacto: { misterio: +1, tension: -1, valor: +1 },
-      flagSet: "compuerta_abierta"
-    });
-  }
-
-  if (perfil.tono === "comico") {
-    ops.push({
-      texto: "Hacerte el chistoso para calmarte",
-      impacto: { tension: -1, moralidad: +1 }
-    });
-  }
-
-  // recorta a 2-4 opciones
-  return recortar(ops, 4);
-}
-
-function recortar(arr, max) {
-  // asegura variedad: mezcla y corta
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, max);
-}
-
-function pushFlag(estado, texto) {
-  estado.flags.log = estado.flags.log || [];
-  estado.flags.log.push(texto);
-  if (estado.flags.log.length > 8) estado.flags.log.shift();
-}
-
-export function generarEscena({ estado, perfil, datosUsuario }) {
-  const pool = getPool(perfil);
-  ensureObjetivo(estado, pool);
-
-  estado.turno = (estado.turno ?? 0) + 1;
-  avanzarFase(estado);
-
-  const faseKey = faseNombre(estado.fase);
-
-  const i = Number(perfil.intensidad ?? 6);
-  const riesgo = i >= 8 ? 2 : i <= 3 ? 0 : 1;
-
-  const amenaza = pick(pool.amenazas);
-  const evento = eventoConNoRepetir(estado, pool, faseKey);
-
-  const memoria = estado.memoria?.slice(-2).join(" | ") || "vacía";
-  const logFlags = (estado.flags?.log || []).slice(-2).join(" | ");
-
-  const texto =
-`${perfil.tono === "oscuro" ? "La luz parece enferma." : ""}
-Estás en ${datosUsuario.lugar}. Objetivo: ${estado.objetivo}.
-Fase: ${faseKey.toUpperCase()}.
-
-Ocurre: ${evento}.
-Sientes que ${amenaza} está cerca.
-Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.
-
-Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
-Inventario: ${estado.inventario.join(", ") || "vacío"}
-Flags: ${logFlags || "ninguna"}
-Memoria: ${memoria}`;
-
-  let opciones = opcionesBase({ estado, perfil, pool, amenaza, riesgo });
-
-  // normaliza impactos
-  opciones.forEach(o => {
-    o.impacto = o.impacto || {};
-    if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
-    if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
-    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
-    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
-    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
-  });
-
-  return { texto, opciones, meta: { faseKey, evento, amenaza, riesgo } };
-}
+    if (o.impacto.misterio != null) o.impact
