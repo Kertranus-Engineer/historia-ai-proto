@@ -1,91 +1,75 @@
-import { hashScene, buildPrompt, getCachedImage, setCachedImage } from "./image.js";
-import {
-  crearPerfil,
-  crearEstadoInicial,
-  pushMemoria,
-  resumenMemoriaCorta,
-  aplicarImpacto
-} from "./engine.js";
+// script.js (REEMPLAZA tu función render() completa por esta)
 
+import { crearEstadoInicial, aplicarImpacto, pushMemoria } from "./engine.js";
 import { generarEscena } from "./generator.js";
+import { hashScene, buildPrompt, getCachedImage, setCachedImage } from "./image.js";
 
-let perfil = null;
 let estado = null;
-let datosUsuario = {};
+let datosUsuario = null;
+let perfil = null;
+let escenaActual = null;
 
-const KEY_SAVE = "historiaAI_save_v3";
+function $(id){ return document.getElementById(id); }
 
-// ===== Save/Load =====
-function guardar() {
-  const payload = { perfil, estado, datosUsuario, ts: Date.now() };
-  localStorage.setItem(KEY_SAVE, JSON.stringify(payload));
+function cargarPartida() {
+  try {
+    const raw = localStorage.getItem("historiaAI_save_v1");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
-function cargar() {
-  const raw = localStorage.getItem(KEY_SAVE);
-  if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+function guardarPartida() {
+  try {
+    localStorage.setItem("historiaAI_save_v1", JSON.stringify({ estado, datosUsuario, perfil }));
+  } catch {}
 }
 
-function borrarSave() {
-  localStorage.removeItem(KEY_SAVE);
+function limpiarPartida() {
+  localStorage.removeItem("historiaAI_save_v1");
 }
 
-function irJuego() {
-  document.getElementById("intro").style.display = "none";
-  document.getElementById("juego").style.display = "block";
+function mostrarIntro() {
+  $("intro").style.display = "block";
+  $("juego").style.display = "none";
 }
 
-function irIntro() {
-  document.getElementById("juego").style.display = "none";
-  document.getElementById("intro").style.display = "block";
+function mostrarJuego() {
+  $("intro").style.display = "none";
+  $("juego").style.display = "block";
 }
 
-// ===== Final conditions =====
-function esFinal() {
-  // puedes ajustar esto después
+function aplicarSonido(id) {
+  const el = $(id);
+  if (!el) return;
+  try { el.currentTime = 0; el.play(); } catch {}
+}
+
+function finalTexto() {
   if (estado.salud <= 0) return "FINAL: Caíste. Te faltó suerte o te sobró intensidad.";
-  if (estado.misterio >= 6) return "FINAL: Conectas las piezas. Entiendes qué estaba pasando.";
-  if (estado.tension >= 8) return "FINAL: Te sobrepasa la tensión. Te quiebras y huyes.";
-  if (estado.valor >= 6) return "FINAL: Te impones. Sales por decisión, no por accidente.";
+  if (estado.turno >= 12) return "FINAL: Llegaste al final de esta ruta. Sobreviviste… por ahora.";
+  if (estado.misterio >= 6) return "FINAL: Descubriste un secreto grande. No podrás olvidar lo que viste.";
+  if (estado.valor >= 6) return "FINAL: Te convertiste en alguien que no retrocede.";
+  if (estado.tension >= 8) return "FINAL: Tu mente se quebró antes que tu cuerpo.";
   return null;
 }
 
-// ===== Render loop =====
-let escenaActual = null;
-
+// =========================
+// ✅ ESTA ES LA QUE PEDISTE
+// =========================
 function render() {
-  const final = esFinal();
-  if (final) {
-    renderFinal(final);
-    guardar();
+  if (!estado || !datosUsuario || !perfil) {
+    mostrarIntro();
     return;
   }
 
-  escenaActual = generarEscena({ estado, perfil, datosUsuario });
-
-  document.getElementById("texto").innerText = escenaActual.texto;
-
-  const cont = document.getElementById("opciones");
-  cont.innerHTML = "";
-
-  escenaActual.opciones.forEach((op, idx) => {
-    const b = document.createElement("button");
-    b.textContent = op.texto;
-    b.addEventListener("click", () => elegir(idx));
-    cont.appendChild(b);
-  });
-
-  // sin imágenes aún
-  const imgEl = document.getElementById("imagen");
-  imgEl.removeAttribute("src");
-
-  guardar();
-}
-
-function renderFinal(finalText) {
-  document.getElementById("texto").innerText =
-`${finalText}
+  // ¿terminó?
+  const fin = finalTexto();
+  if (fin) {
+    mostrarJuego();
+    const textoFin =
+`${fin}
 
 ESTADO FINAL
 salud=${estado.salud}
@@ -93,133 +77,165 @@ tension=${estado.tension}
 misterio=${estado.misterio}
 moralidad=${estado.moralidad}
 valor=${estado.valor}
-inventario=${estado.inventario.join(", ") || "vacío"}
+inventario=${(estado.inventario || []).join(", ") || "vacío"}
 
-Memoria: ${resumenMemoriaCorta(estado)}
-`;
+Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
 
-  const cont = document.getElementById("opciones");
-  cont.innerHTML = "";
+    $("texto").innerText = textoFin;
+    $("opciones").innerHTML = "";
 
-  const b1 = document.createElement("button");
-  b1.textContent = "Reiniciar";
-  b1.addEventListener("click", () => {
-    estado = crearEstadoInicial();
-    pushMemoria(estado, "Reiniciaste la historia.");
-    render();
+    // imagen final: usa última escena si existe, si no placeholder fijo
+    const imgEl = $("imagen");
+    imgEl.src = imgEl.src || "https://via.placeholder.com/900x450?text=FINAL";
+
+    const btnReiniciar = document.createElement("button");
+    btnReiniciar.textContent = "Reiniciar";
+    btnReiniciar.className = "btn";
+    btnReiniciar.onclick = () => {
+      estado = crearEstadoInicial();
+      guardarPartida();
+      render();
+    };
+
+    const btnVolver = document.createElement("button");
+    btnVolver.textContent = "Volver al inicio";
+    btnVolver.className = "btn secondary";
+    btnVolver.onclick = () => {
+      mostrarIntro();
+    };
+
+    const btnBorrar = document.createElement("button");
+    btnBorrar.textContent = "Borrar partida";
+    btnBorrar.className = "btn danger";
+    btnBorrar.onclick = () => {
+      limpiarPartida();
+      estado = null; datosUsuario = null; perfil = null; escenaActual = null;
+      mostrarIntro();
+    };
+
+    $("opciones").appendChild(btnReiniciar);
+    $("opciones").appendChild(btnVolver);
+    $("opciones").appendChild(btnBorrar);
+    return;
+  }
+
+  // genera escena
+  escenaActual = generarEscena({ estado, perfil, datosUsuario });
+  mostrarJuego();
+
+  // === Imagen/PROMPT pipeline (sceneId → prompt → cache → imagen) ===
+  const sceneId = hashScene(escenaActual.meta, escenaActual.texto);
+  const prompt = buildPrompt({ perfil, datosUsuario, meta: escenaActual.meta });
+
+  // Texto (incluye prompt como debug)
+  $("texto").innerText = escenaActual.texto + "\n\nPROMPT VISUAL:\n" + prompt;
+
+  // Imagen: cache primero
+  const imgEl = $("imagen");
+  const cached = getCachedImage(sceneId);
+
+  if (cached) {
+    imgEl.src = cached;
+  } else {
+    // placeholder simple online
+    const safe = encodeURIComponent(
+      `${(escenaActual.meta?.faseKey || "escena").toUpperCase()} | ${(perfil.genero || "historia")}`
+    );
+    const url = `https://via.placeholder.com/900x450?text=${safe}`;
+    imgEl.src = url;
+    setCachedImage(sceneId, url);
+  }
+
+  // render opciones
+  $("opciones").innerHTML = "";
+  (escenaActual.opciones || []).forEach((op, i) => {
+    const b = document.createElement("button");
+    b.textContent = op.texto;
+    b.className = "btn";
+    b.onclick = () => elegir(i);
+    $("opciones").appendChild(b);
   });
-  cont.appendChild(b1);
 
-  const b2 = document.createElement("button");
-  b2.textContent = "Volver al inicio";
-  b2.style.background = "#444";
-  b2.addEventListener("click", () => {
-    irIntro();
-  });
-  cont.appendChild(b2);
+  guardarPartida();
+}
 
-  const b3 = document.createElement("button");
-  b3.textContent = "Borrar partida";
-  b3.style.background = "#333";
-  b3.addEventListener("click", () => {
-    borrarSave();
-    alert("Partida borrada");
-    irIntro();
-  });
-  cont.appendChild(b3);
 function elegir(i) {
   if (!escenaActual) return;
   const op = escenaActual.opciones[i];
   if (!op) return;
 
-  // memoria
-  pushMemoria(estado, `Fase: ${escenaActual.meta?.faseKey || "?"}`);
-  pushMemoria(estado, `Ocurre: ${escenaActual.meta?.evento || "evento"}`);
+  aplicarSonido("sfxClick");
+
+  pushMemoria(estado, `Evento: ${escenaActual.meta?.evento || ""}`);
   pushMemoria(estado, `Elegiste: ${op.texto}`);
 
-  // impactos
-  aplicarImpacto(estado, op.impacto);
+  aplicarImpacto(estado, op.impacto || {});
 
-  // consume item
   if (op.consume) {
-    estado.inventario = estado.inventario.filter(x => x !== op.consume);
-    estado.flags.log = estado.flags.log || [];
-    estado.flags.log.push(`Consumiste: ${op.consume}`);
+    estado.inventario = (estado.inventario || []).filter(x => x !== op.consume);
+    pushMemoria(estado, `Consumiste: ${op.consume}`);
   }
 
-  // set flag
   if (op.flagSet) {
+    estado.flags = estado.flags || {};
     estado.flags[op.flagSet] = true;
-    estado.flags.log = estado.flags.log || [];
-    estado.flags.log.push(`Flag: ${op.flagSet}`);
+    pushMemoria(estado, `Flag: ${op.flagSet}`);
   }
 
-  // efecto opcional (si viene)
   if (typeof op.efecto === "function") {
-    op.efecto(estado);
+    try { op.efecto(estado); } catch {}
   }
 
   render();
 }
 
-// ===== Start/Continue =====
-function iniciarNueva() {
-  datosUsuario = {
-    lugar: document.getElementById("lugar").value.trim() || "un lugar desconocido",
-    miedo: document.getElementById("miedo").value.trim() || "algo innombrable",
-    deseo: document.getElementById("deseo").value.trim() || "una salida"
-  };
+// --- init UI (ajusta ids si difieren) ---
+document.addEventListener("DOMContentLoaded", () => {
+  // cargar save
+  const save = cargarPartida();
+  if (save?.estado && save?.datosUsuario && save?.perfil) {
+    estado = save.estado;
+    datosUsuario = save.datosUsuario;
+    perfil = save.perfil;
+  }
 
-  perfil = crearPerfil({
-    genero: document.getElementById("genero").value,
-    tono: document.getElementById("tono").value,
-    intensidad: Number(document.getElementById("intensidad").value),
-    protagonista: "normal",
-    tema: "misterio"
-  });
+  const btnComenzar = $("btnComenzar");
+  if (btnComenzar) {
+    btnComenzar.onclick = () => {
+      datosUsuario = {
+        lugar: ($("lugar")?.value || "un lugar desconocido").trim(),
+        miedo: ($("miedo")?.value || "algo").trim(),
+        deseo: ($("deseo")?.value || "seguir").trim(),
+      };
 
-  estado = crearEstadoInicial();
-  pushMemoria(estado, "Despertaste sin entender cómo llegaste.");
+      perfil = {
+        genero: ($("genero")?.value || "supervivencia").trim(),
+        tono: ($("tono")?.value || "tenso").trim(),
+        intensidad: Number($("intensidad")?.value || 6),
+      };
 
-  irJuego();
+      estado = crearEstadoInicial();
+      guardarPartida();
+      render();
+    };
+  }
+
+  const btnContinuar = $("btnContinuar");
+  if (btnContinuar) {
+    btnContinuar.onclick = () => {
+      if (!estado) return;
+      render();
+    };
+  }
+
+  const btnBorrar = $("btnBorrar");
+  if (btnBorrar) {
+    btnBorrar.onclick = () => {
+      limpiarPartida();
+      estado = null; datosUsuario = null; perfil = null; escenaActual = null;
+      render();
+    };
+  }
+
   render();
-}
-
-function continuar() {
-  const saved = cargar();
-  if (!saved) return;
-
-  perfil = saved.perfil;
-  estado = saved.estado;
-  datosUsuario = saved.datosUsuario;
-
-  // rellena UI
-  document.getElementById("lugar").value = datosUsuario.lugar || "";
-  document.getElementById("miedo").value = datosUsuario.miedo || "";
-  document.getElementById("deseo").value = datosUsuario.deseo || "";
-  document.getElementById("genero").value = perfil.genero || "supervivencia";
-  document.getElementById("tono").value = perfil.tono || "tenso";
-  document.getElementById("intensidad").value = perfil.intensidad ?? 6;
-
-  irJuego();
-  render();
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("btnComenzar").addEventListener("click", iniciarNueva);
-
-  const btnCont = document.getElementById("btnContinuar");
-  if (btnCont) btnCont.addEventListener("click", continuar);
-
-  const btnReset = document.getElementById("btnReset");
-  if (btnReset) btnReset.addEventListener("click", () => {
-    borrarSave();
-    alert("Partida borrada");
-  });
-
-  // habilita continuar si hay save
-  const saved = cargar();
-  if (btnCont) btnCont.disabled = !saved;
 });
-
-
