@@ -1,3 +1,4 @@
+import { hashScene, buildPrompt, getCachedImage, setCachedImage } from "./image.js";
 import {
   crearPerfil,
   crearEstadoInicial,
@@ -220,4 +221,5 @@ window.addEventListener("DOMContentLoaded", () => {
   const saved = cargar();
   if (btnCont) btnCont.disabled = !saved;
 });
+
 
