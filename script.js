@@ -6,27 +6,15 @@ import {
   aplicarImpacto
 } from "./engine.js";
 
+import { generarEscena } from "./generator.js";
+
 let perfil = null;
 let estado = null;
 let datosUsuario = {};
 
-const KEY_SAVE = "historiaAI_save_v1";
+const KEY_SAVE = "historiaAI_save_v3";
 
-function tonoPorPerfil(p) {
-  if (p?.tono === "oscuro") return "El ambiente se siente pesado y hostil.";
-  if (p?.tono === "esperanzador") return "A pesar de todo, hay señales de salida.";
-  if (p?.tono === "comico") return "Tu cerebro hace chistes malos para no colapsar.";
-  return "Todo se siente tenso.";
-}
-
-function generarEventoBase() {
-  if (perfil?.genero === "horror") return "Un susurro te llama desde donde no hay nadie.";
-  if (perfil?.genero === "ciencia ficcion") return "Un pitido metálico se repite como señal de auxilio.";
-  if (perfil?.genero === "fantasia") return "La niebla revela un símbolo antiguo marcado en tierra.";
-  return "El entorno parece inestable, como si algo hubiera ocurrido hace poco.";
-}
-
-// ===== Guardado =====
+// ===== Save/Load =====
 function guardar() {
   const payload = { perfil, estado, datosUsuario, ts: Date.now() };
   localStorage.setItem(KEY_SAVE, JSON.stringify(payload));
@@ -52,89 +40,110 @@ function irIntro() {
   document.getElementById("intro").style.display = "block";
 }
 
-const ESCENAS = {
-  1: () => ({
-    texto: `${tonoPorPerfil(perfil)}
-Despiertas en ${datosUsuario.lugar}.
-${generarEventoBase()}
-Tu miedo (${datosUsuario.miedo}) te aprieta el pecho.
-Piensas en ${datosUsuario.deseo}, pero juras que algo te observa.
+// ===== Final conditions =====
+function esFinal() {
+  // puedes ajustar esto después
+  if (estado.salud <= 0) return "FINAL: Caíste. Te faltó suerte o te sobró intensidad.";
+  if (estado.misterio >= 6) return "FINAL: Conectas las piezas. Entiendes qué estaba pasando.";
+  if (estado.tension >= 8) return "FINAL: Te sobrepasa la tensión. Te quiebras y huyes.";
+  if (estado.valor >= 6) return "FINAL: Te impones. Sales por decisión, no por accidente.";
+  return null;
+}
 
-Memoria: ${resumenMemoriaCorta(estado)}`,
-    opciones: [
-      { texto: "Enfrentar", go: 2, impacto: { valor: +1 } },
-      { texto: "Huir", go: 3, impacto: { tension: +1 } },
-      { texto: "Investigar", go: 4, impacto: { misterio: +1 } }
-    ]
-  }),
-  2: () => ({
-    texto: `Te pones de pie. Una silueta aparece entre el humo.\nMemoria: ${resumenMemoriaCorta(estado)}`,
-    opciones: [
-      { texto: "Hablar", go: 4, impacto: { moralidad: +1 } },
-      { texto: "Prepararte", go: 3, impacto: { tension: +1 } }
-    ]
-  }),
-  3: () => ({
-    texto: `Corres. Tropiezas. Te raspas.\nMemoria: ${resumenMemoriaCorta(estado)}`,
-    opciones: [
-      { texto: "Respirar y pensar", go: 4, impacto: { salud: -1 } },
-      { texto: "Seguir corriendo", go: 4, impacto: { tension: +1 } }
-    ]
-  }),
-  4: () => ({
-    texto: `Encuentras una salida parcial. (Demo)\n\nESTADO: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}`,
-    opciones: [
-      { texto: "Reiniciar", go: 1, impacto: { reset: true } },
-      { texto: "Volver al inicio (sin borrar)", go: 999, impacto: {} }
-    ]
-  })
-};
+// ===== Render loop =====
+let escenaActual = null;
 
 function render() {
-  const data = ESCENAS[estado.escena]();
+  const final = esFinal();
+  if (final) {
+    renderFinal(final);
+    guardar();
+    return;
+  }
 
-  const imgEl = document.getElementById("imagen");
-  imgEl.removeAttribute("src");
+  escenaActual = generarEscena({ estado, perfil, datosUsuario });
 
-  document.getElementById("texto").innerText = data.texto;
+  document.getElementById("texto").innerText = escenaActual.texto;
 
   const cont = document.getElementById("opciones");
   cont.innerHTML = "";
-  data.opciones.forEach((op, idx) => {
+
+  escenaActual.opciones.forEach((op, idx) => {
     const b = document.createElement("button");
     b.textContent = op.texto;
     b.addEventListener("click", () => elegir(idx));
     cont.appendChild(b);
   });
 
-  guardar(); // autosave cada render
+  // sin imágenes aún
+  const imgEl = document.getElementById("imagen");
+  imgEl.removeAttribute("src");
+
+  guardar();
 }
 
-function elegir(i) {
-  const data = ESCENAS[estado.escena]();
-  const op = data.opciones[i];
-  if (!op) return;
+function renderFinal(finalText) {
+  document.getElementById("texto").innerText =
+`${finalText}
 
-  if (op.impacto?.reset) {
+ESTADO FINAL
+salud=${estado.salud}
+tension=${estado.tension}
+misterio=${estado.misterio}
+moralidad=${estado.moralidad}
+valor=${estado.valor}
+inventario=${estado.inventario.join(", ") || "vacío"}
+
+Memoria: ${resumenMemoriaCorta(estado)}
+`;
+
+  const cont = document.getElementById("opciones");
+  cont.innerHTML = "";
+
+  const b1 = document.createElement("button");
+  b1.textContent = "Reiniciar";
+  b1.addEventListener("click", () => {
     estado = crearEstadoInicial();
     pushMemoria(estado, "Reiniciaste la historia.");
     render();
-    return;
-  }
+  });
+  cont.appendChild(b1);
 
-  if (op.go === 999) {
+  const b2 = document.createElement("button");
+  b2.textContent = "Volver al inicio";
+  b2.style.background = "#444";
+  b2.addEventListener("click", () => {
     irIntro();
-    guardar();
-    return;
-  }
+  });
+  cont.appendChild(b2);
+
+  const b3 = document.createElement("button");
+  b3.textContent = "Borrar partida";
+  b3.style.background = "#333";
+  b3.addEventListener("click", () => {
+    borrarSave();
+    alert("Partida borrada");
+    irIntro();
+  });
+  cont.appendChild(b3);
+}
+
+function elegir(i) {
+  if (!escenaActual) return;
+  const op = escenaActual.opciones[i];
+  if (!op) return;
+
+  // snapshot mínimo de memoria narrativa
+  pushMemoria(estado, `Evento: ${escenaActual.texto.split("\n")[0]}`);
+  pushMemoria(estado, `Elegiste: ${op.texto}`);
 
   aplicarImpacto(estado, op.impacto);
-  pushMemoria(estado, `Elegiste: ${op.texto}`);
-  estado.escena = op.go;
 
+  // siguiente escena
   render();
 }
 
+// ===== Start/Continue =====
 function iniciarNueva() {
   datosUsuario = {
     lugar: document.getElementById("lugar").value.trim() || "un lugar desconocido",
@@ -165,7 +174,7 @@ function continuar() {
   estado = saved.estado;
   datosUsuario = saved.datosUsuario;
 
-  // rellena inputs para que se vean coherentes
+  // rellena UI
   document.getElementById("lugar").value = datosUsuario.lugar || "";
   document.getElementById("miedo").value = datosUsuario.miedo || "";
   document.getElementById("deseo").value = datosUsuario.deseo || "";
@@ -189,7 +198,7 @@ window.addEventListener("DOMContentLoaded", () => {
     alert("Partida borrada");
   });
 
-  // habilita/deshabilita continuar
+  // habilita continuar si hay save
   const saved = cargar();
   if (btnCont) btnCont.disabled = !saved;
 });
