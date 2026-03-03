@@ -60,7 +60,7 @@ function faseNombre(fase) {
 }
 
 function getPool(perfil) {
-  const g = (perfil?.genero || "supervivencia").toLowerCase();
+  const g = (perfil.genero || "supervivencia").trim();
   return POOLS[g] || POOLS.supervivencia;
 }
 
@@ -69,7 +69,6 @@ function ensureObjetivo(estado, pool) {
 }
 
 function avanzarFase(estado) {
-  // 0-2 setup, 3-6 complica, 7-9 climax, 10+ resuelve
   if (estado.turno >= 10) estado.fase = 3;
   else if (estado.turno >= 7) estado.fase = 2;
   else if (estado.turno >= 3) estado.fase = 1;
@@ -80,12 +79,13 @@ function eventoConNoRepetir(estado, pool, faseKey) {
   const opciones = pool.eventos[faseKey];
   if (!opciones?.length) return "pasa algo extraño.";
 
-  const last = estado.flags?.lastEvento || null;
+  estado.flags = estado.flags || {};
+  const last = estado.flags.lastEvento || null;
+
   let e = pick(opciones);
   if (last && e === last && opciones.length > 1) {
     e = pick(opciones.filter(x => x !== last));
   }
-  estado.flags = estado.flags || {};
   estado.flags.lastEvento = e;
   return e;
 }
@@ -104,8 +104,8 @@ function pushLog(estado, texto) {
 }
 
 function eventoGlobalAleatorio(estado) {
-  if (!Array.isArray(eventos) || eventos.length === 0) return null;
-  if (Math.random() > 0.5) return null; // 50%
+  if (!eventos?.length) return null;
+  if (Math.random() > 0.5) return null;
 
   const e = pick(eventos);
   try {
@@ -115,7 +115,8 @@ function eventoGlobalAleatorio(estado) {
 }
 
 function recortar(arr, max) {
-  return [...arr].sort(() => Math.random() - 0.5).slice(0, max);
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, max);
 }
 
 function opcionesBase({ estado, perfil, riesgo }) {
@@ -128,14 +129,18 @@ function opcionesBase({ estado, perfil, riesgo }) {
       const last = s.flags?.lastEvento || "";
       const itemHallazgo = parseHallazgo(last);
 
-      if (itemHallazgo && !s.inventario.includes(itemHallazgo)) {
-        s.inventario.push(itemHallazgo);
-        pushLog(s, `Obtuviste: ${itemHallazgo}`);
-        return;
+      if (itemHallazgo) {
+        s.inventario = s.inventario || [];
+        if (!s.inventario.includes(itemHallazgo)) {
+          s.inventario.push(itemHallazgo);
+          pushLog(s, `Obtuviste: ${itemHallazgo}`);
+          return;
+        }
       }
 
       if (Math.random() < 0.35) {
         const obj = pick(OBJETOS);
+        s.inventario = s.inventario || [];
         if (!s.inventario.includes(obj)) {
           s.inventario.push(obj);
           pushLog(s, `Obtuviste: ${obj}`);
@@ -153,6 +158,9 @@ function opcionesBase({ estado, perfil, riesgo }) {
     texto: "Actuar con valentía",
     impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
   });
+
+  // Condicionales por inventario
+  estado.inventario = estado.inventario || [];
 
   if (estado.inventario.includes("botiquín")) {
     ops.push({
@@ -186,17 +194,6 @@ function opcionesBase({ estado, perfil, riesgo }) {
   }
 
   return recortar(ops, 4);
-}
-
-function normalizarImpactos(opciones) {
-  opciones.forEach(o => {
-    o.impacto = o.impacto || {};
-    if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
-    if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
-    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
-    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
-    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
-  });
 }
 
 export function generarEscena({ estado, perfil, datosUsuario }) {
@@ -234,12 +231,20 @@ Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.
   texto += `
 
 Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
-Inventario: ${estado.inventario.join(", ") || "vacío"}
+Inventario: ${(estado.inventario || []).join(", ") || "vacío"}
 Flags: ${logFlags || "ninguna"}
 Memoria: ${memoria}`;
 
-  const opciones = opcionesBase({ estado, perfil, riesgo });
-  normalizarImpactos(opciones);
+  let opciones = opcionesBase({ estado, perfil, riesgo });
+
+  opciones.forEach(o => {
+    o.impacto = o.impacto || {};
+    if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
+    if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
+    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
+    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
+    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
+  });
 
   return {
     texto,
