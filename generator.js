@@ -193,4 +193,57 @@ function normalizarImpactos(opciones) {
     o.impacto = o.impacto || {};
     if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
     if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
-    if (o.impacto.misterio != null
+    if (o.impacto.misterio != null) o.impacto.misterio = clamp(o.impacto.misterio, -1, +2);
+    if (o.impacto.valor != null) o.impacto.valor = clamp(o.impacto.valor, -1, +2);
+    if (o.impacto.moralidad != null) o.impacto.moralidad = clamp(o.impacto.moralidad, -1, +2);
+  });
+}
+
+export function generarEscena({ estado, perfil, datosUsuario }) {
+  const pool = getPool(perfil);
+  ensureObjetivo(estado, pool);
+
+  estado.turno = (estado.turno ?? 0) + 1;
+  avanzarFase(estado);
+
+  const faseKey = faseNombre(estado.fase);
+
+  const i = Number(perfil.intensidad ?? 6);
+  const riesgo = i >= 8 ? 2 : i <= 3 ? 0 : 1;
+
+  const amenaza = pick(pool.amenazas);
+  const eventoLocal = eventoConNoRepetir(estado, pool, faseKey);
+  const eventoGlobal = eventoGlobalAleatorio(estado);
+
+  const memoria = (estado.memoria || []).slice(-2).join(" | ") || "vacía";
+  const logFlags = (estado.flags?.log || []).slice(-2).join(" | ");
+
+  let texto =
+`${perfil.tono === "oscuro" ? "La luz parece enferma.\n" : ""}Estás en ${datosUsuario.lugar}. Objetivo: ${estado.objetivo}.
+Fase: ${faseKey.toUpperCase()}.
+
+Ocurre: ${eventoLocal}.
+Sientes que ${amenaza} está cerca.
+Tu miedo (${datosUsuario.miedo}) aparece, pero piensas en ${datosUsuario.deseo}.`;
+
+  if (eventoGlobal) {
+    texto += `\n\nEVENTO EXTRA: ${eventoGlobal}.`;
+    pushLog(estado, `Evento extra: ${eventoGlobal}`);
+  }
+
+  texto += `
+
+Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
+Inventario: ${estado.inventario.join(", ") || "vacío"}
+Flags: ${logFlags || "ninguna"}
+Memoria: ${memoria}`;
+
+  const opciones = opcionesBase({ estado, perfil, riesgo });
+  normalizarImpactos(opciones);
+
+  return {
+    texto,
+    opciones,
+    meta: { faseKey, evento: eventoLocal, amenaza, riesgo, eventoGlobal }
+  };
+}
