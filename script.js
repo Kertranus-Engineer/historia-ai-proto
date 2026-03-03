@@ -68,6 +68,7 @@ function render() {
   const fin = finalTexto();
   if (fin) {
     mostrarJuego();
+
     const textoFin =
 `${fin}
 
@@ -82,9 +83,11 @@ inventario=${(estado.inventario || []).join(", ") || "vacío"}
 Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
 
     $("texto").innerText = textoFin;
+    if ($("promptVisual")) $("promptVisual").innerText = "";
+    if ($("debugEstado")) $("debugEstado").innerText = "";
+
     $("opciones").innerHTML = "";
 
-    // imagen final: usa última escena si existe, si no placeholder fijo
     const imgEl = $("imagen");
     imgEl.src = imgEl.src || "https://via.placeholder.com/900x450?text=FINAL";
 
@@ -100,16 +103,17 @@ Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
     const btnVolver = document.createElement("button");
     btnVolver.textContent = "Volver al inicio";
     btnVolver.className = "btn secondary";
-    btnVolver.onclick = () => {
-      mostrarIntro();
-    };
+    btnVolver.onclick = () => { mostrarIntro(); };
 
     const btnBorrar = document.createElement("button");
     btnBorrar.textContent = "Borrar partida";
     btnBorrar.className = "btn danger";
     btnBorrar.onclick = () => {
       limpiarPartida();
-      estado = null; datosUsuario = null; perfil = null; escenaActual = null;
+      estado = null;
+      datosUsuario = null;
+      perfil = null;
+      escenaActual = null;
       mostrarIntro();
     };
 
@@ -123,12 +127,26 @@ Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
   escenaActual = generarEscena({ estado, perfil, datosUsuario });
   mostrarJuego();
 
-  // === Imagen/PROMPT pipeline (sceneId → prompt → cache → imagen) ===
+  // Imagen/PROMPT pipeline
   const sceneId = hashScene(escenaActual.meta, escenaActual.texto);
   const prompt = buildPrompt({ perfil, datosUsuario, meta: escenaActual.meta });
 
-  // Texto (incluye prompt como debug)
-  $("texto").innerText = escenaActual.texto + "\n\nPROMPT VISUAL:\n" + prompt;
+  // Historia sin debug
+  $("texto").innerText = escenaActual.texto;
+
+  // Prompt en panel aparte
+  if ($("promptVisual")) $("promptVisual").innerText = prompt;
+
+  // Debug estado (bonito)
+  if ($("debugEstado")) {
+    const dbg =
+`turno=${estado.turno} fase=${escenaActual.meta?.faseKey}
+salud=${estado.salud} tension=${estado.tension}
+misterio=${estado.misterio} moralidad=${estado.moralidad} valor=${estado.valor}
+inventario=${(estado.inventario || []).join(", ") || "vacío"}
+memoria=${(estado.memoria || []).slice(-3).join(" | ") || "vacía"}`;
+    $("debugEstado").innerText = dbg;
+  }
 
   // Imagen: cache primero
   const imgEl = $("imagen");
@@ -137,7 +155,6 @@ Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
   if (cached) {
     imgEl.src = cached;
   } else {
-    // placeholder simple online
     const safe = encodeURIComponent(
       `${(escenaActual.meta?.faseKey || "escena").toUpperCase()} | ${(perfil.genero || "historia")}`
     );
@@ -146,7 +163,7 @@ Memoria: ${(estado.memoria || []).slice(-2).join(" | ") || "vacía"}`;
     setCachedImage(sceneId, url);
   }
 
-  // render opciones
+  // opciones
   $("opciones").innerHTML = "";
   (escenaActual.opciones || []).forEach((op, i) => {
     const b = document.createElement("button");
@@ -239,3 +256,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
   render();
 });
+
