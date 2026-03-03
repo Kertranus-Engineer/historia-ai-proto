@@ -1,132 +1,70 @@
+<!-- index.html (REEMPLAZA TODO por esto) -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Historia IA Prototipo</title>
-
-<style>
-body{
-    font-family:Arial,Helvetica,sans-serif;
-    background:#111;
-    color:#eee;
-    display:flex;
-    justify-content:center;
-    padding:30px;
-}
-
-.container{
-    max-width:700px;
-    width:100%;
-}
-
-.card{
-    background:#1b1b1b;
-    padding:25px;
-    border-radius:10px;
-    margin-top:15px;
-}
-
-input,select{
-    width:100%;
-    padding:10px;
-    margin-top:10px;
-    background:#222;
-    border:1px solid #444;
-    color:#eee;
-}
-
-button{
-    margin-top:12px;
-    padding:10px 16px;
-    background:#2d6cdf;
-    border:none;
-    color:white;
-    border-radius:6px;
-    cursor:pointer;
-}
-
-button:hover{
-    opacity:.9;
-}
-
-#opciones button{
-    display:block;
-    width:100%;
-    margin-top:10px;
-}
-
-#imagen{
-    width:100%;
-    border-radius:6px;
-    margin-bottom:15px;
-}
-
-.hint{
-    opacity:.6;
-    font-size:13px;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Historia IA Prototipo</title>
+  <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
+  <div class="container">
+    <h1>Tu Historia Comienza</h1>
 
-<div class="container">
+    <!-- INTRO / CONFIG -->
+    <div id="intro" class="card">
+      <p>Responde breve (o déjalo vacío):</p>
 
-<h1>Tu Historia Comienza</h1>
+      <input id="lugar" placeholder="Un lugar que te guste (ej: El campo)" />
+      <input id="miedo" placeholder="Un miedo (ej: Arañas)" />
+      <input id="deseo" placeholder="Algo que deseas (ej: Ser feliz)" />
 
-<div id="intro" class="card">
+      <hr style="margin:20px 0; opacity:.2" />
 
-<p>Responde breve (o déjalo vacío):</p>
+      <select id="genero">
+        <option value="supervivencia">Supervivencia</option>
+        <option value="horror">Horror</option>
+        <option value="ciencia ficcion">Ciencia ficción</option>
+        <option value="fantasia">Fantasía</option>
+      </select>
 
-<input id="lugar" placeholder="Un lugar que te guste (ej: El campo)">
-<input id="miedo" placeholder="Un miedo (ej: Arañas)">
-<input id="deseo" placeholder="Algo que deseas (ej: Ser feliz)">
+      <select id="tono">
+        <option value="tenso">Tenso</option>
+        <option value="oscuro">Oscuro</option>
+        <option value="esperanzador">Esperanzador</option>
+        <option value="comico">Cómico</option>
+      </select>
 
-<hr style="margin:20px 0;opacity:.2">
+      <label for="intensidad">Intensidad (1-10)</label>
+      <input type="range" id="intensidad" min="1" max="10" value="6" />
 
-<select id="genero">
-<option value="supervivencia">Supervivencia</option>
-<option value="horror">Horror</option>
-<option value="ciencia ficcion">Ciencia ficción</option>
-<option value="fantasia">Fantasía</option>
-</select>
+      <div class="row">
+        <button id="btnComenzar" class="btn">Comenzar</button>
+        <button id="btnContinuar" class="btn secondary">Continuar</button>
+        <button id="btnBorrar" class="btn danger">Borrar partida</button>
+      </div>
 
-<select id="tono">
-<option value="tenso">Tenso</option>
-<option value="oscuro">Oscuro</option>
-<option value="esperanzador">Esperanzador</option>
-<option value="comico">Cómico</option>
-</select>
+      <p class="hint">Si algo falla abre Console con Ctrl+Shift+I</p>
+    </div>
 
-<label for="intensidad">Intensidad (1-10)</label>
-<input type="range" id="intensidad" min="1" max="10" value="6">
+    <!-- JUEGO -->
+    <div id="juego" class="card" style="display:none;">
+      <img
+        id="imagen"
+        alt="Escena"
+        style="width:100%; max-width:900px; border-radius:12px; margin-bottom:16px;"
+      />
+      <pre id="texto" class="story"></pre>
+      <div id="opciones" class="options"></div>
+    </div>
 
-<br>
+    <!-- sonidos opcionales -->
+    <audio id="sfxClick" src="click.mp3" preload="auto"></audio>
+    <audio id="sfxDanger" src="danger.mp3" preload="auto"></audio>
+  </div>
 
-<button id="btnComenzar">Comenzar</button>
-<button id="btnContinuar" style="background:#444">Continuar</button>
-<button id="btnReset" style="background:#333">Borrar partida</button>
-
-<p class="hint">
-Si algo falla abre Console con Ctrl+Shift+I
-</p>
-
-</div>
-
-<div id="juego" class="card" style="display:none;">
-
-<img id="imagen">
-
-<div id="texto"></div>
-
-<div id="opciones"></div>
-
-</div>
-
-</div>
-
-<script type="module" src="script.js"></script>
-
+  <!-- IMPORTANTE: script como módulo -->
+  <script type="module" src="./script.js"></script>
 </body>
 </html>
