@@ -69,7 +69,7 @@ function ensureObjetivo(estado, pool) {
 }
 
 function avanzarFase(estado) {
-  // 0-2, 3-6, 7-9, 10+
+  // 0-2 setup, 3-6 complica, 7-9 climax, 10+ resuelve
   if (estado.turno >= 10) estado.fase = 3;
   else if (estado.turno >= 7) estado.fase = 2;
   else if (estado.turno >= 3) estado.fase = 1;
@@ -80,14 +80,12 @@ function eventoConNoRepetir(estado, pool, faseKey) {
   const opciones = pool.eventos[faseKey];
   if (!opciones?.length) return "pasa algo extraño.";
 
-  estado.flags = estado.flags || {};
-  const last = estado.flags.lastEvento || null;
-
+  const last = estado.flags?.lastEvento || null;
   let e = pick(opciones);
   if (last && e === last && opciones.length > 1) {
     e = pick(opciones.filter(x => x !== last));
   }
-
+  estado.flags = estado.flags || {};
   estado.flags.lastEvento = e;
   return e;
 }
@@ -98,7 +96,7 @@ function parseHallazgo(texto) {
   return texto.slice(prefix.length).trim();
 }
 
-function pushFlag(estado, texto) {
+function pushLog(estado, texto) {
   estado.flags = estado.flags || {};
   estado.flags.log = estado.flags.log || [];
   estado.flags.log.push(texto);
@@ -106,20 +104,18 @@ function pushFlag(estado, texto) {
 }
 
 function eventoGlobalAleatorio(estado) {
-  if (!eventos?.length) return null;
+  if (!Array.isArray(eventos) || eventos.length === 0) return null;
   if (Math.random() > 0.5) return null; // 50%
 
   const e = pick(eventos);
   try {
     if (typeof e.efecto === "function") e.efecto(estado);
   } catch {}
-
   return e.texto || null;
 }
 
 function recortar(arr, max) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, max);
+  return [...arr].sort(() => Math.random() - 0.5).slice(0, max);
 }
 
 function opcionesBase({ estado, perfil, riesgo }) {
@@ -129,22 +125,20 @@ function opcionesBase({ estado, perfil, riesgo }) {
     texto: "Investigar",
     impacto: { misterio: +1, tension: +riesgo },
     efecto: (s) => {
-      s.flags = s.flags || {};
-      s.inventario = s.inventario || [];
-
-      const last = s.flags.lastEvento || "";
+      const last = s.flags?.lastEvento || "";
       const itemHallazgo = parseHallazgo(last);
 
       if (itemHallazgo && !s.inventario.includes(itemHallazgo)) {
         s.inventario.push(itemHallazgo);
-        pushFlag(s, `Obtuviste: ${itemHallazgo}`);
-      } else {
-        if (Math.random() < 0.35) {
-          const obj = pick(OBJETOS);
-          if (!s.inventario.includes(obj)) {
-            s.inventario.push(obj);
-            pushFlag(s, `Obtuviste: ${obj}`);
-          }
+        pushLog(s, `Obtuviste: ${itemHallazgo}`);
+        return;
+      }
+
+      if (Math.random() < 0.35) {
+        const obj = pick(OBJETOS);
+        if (!s.inventario.includes(obj)) {
+          s.inventario.push(obj);
+          pushLog(s, `Obtuviste: ${obj}`);
         }
       }
     }
@@ -160,8 +154,7 @@ function opcionesBase({ estado, perfil, riesgo }) {
     impacto: { valor: +1, tension: +1, salud: riesgo ? -1 : 0 }
   });
 
-  // Condicionales inventario
-  if ((estado.inventario || []).includes("botiquín")) {
+  if (estado.inventario.includes("botiquín")) {
     ops.push({
       texto: "Usar botiquín",
       impacto: { salud: +1, tension: -1 },
@@ -169,7 +162,7 @@ function opcionesBase({ estado, perfil, riesgo }) {
     });
   }
 
-  if ((estado.inventario || []).includes("sensor alienígena")) {
+  if (estado.inventario.includes("sensor alienígena")) {
     ops.push({
       texto: "Escanear el entorno",
       impacto: { misterio: +2, tension: +1 },
@@ -177,7 +170,7 @@ function opcionesBase({ estado, perfil, riesgo }) {
     });
   }
 
-  if ((estado.inventario || []).includes("llave antigua") || (estado.inventario || []).includes("llave magnética")) {
+  if (estado.inventario.includes("llave antigua") || estado.inventario.includes("llave magnética")) {
     ops.push({
       texto: "Forzar una puerta con la llave",
       impacto: { misterio: +1, valor: +1, tension: -1 },
@@ -195,58 +188,9 @@ function opcionesBase({ estado, perfil, riesgo }) {
   return recortar(ops, 4);
 }
 
-export function generarEscena({ estado, perfil, datosUsuario }) {
-  const pool = getPool(perfil);
-
-  estado.flags = estado.flags || {};
-  estado.inventario = estado.inventario || [];
-  ensureObjetivo(estado, pool);
-
-  estado.turno = (estado.turno ?? 0) + 1;
-  avanzarFase(estado);
-
-  const faseKey = faseNombre(estado.fase);
-
-  const i = Number(perfil.intensidad ?? 6);
-  const riesgo = i >= 8 ? 2 : i <= 3 ? 0 : 1;
-
-  const amenaza = pick(pool.amenazas);
-  const eventoLocal = eventoConNoRepetir(estado, pool, faseKey);
-
-  const eventoGlobal = eventoGlobalAleatorio(estado);
-
-  const memoria = estado.memoria?.slice(-2).join(" | ") || "vacía";
-  const logFlags = (estado.flags?.log || []).slice(-2).join(" | ");
-
-  const lugar = (datosUsuario?.lugar || "un lugar desconocido").trim();
-  const miedo = (datosUsuario?.miedo || "algo").trim();
-  const deseo = (datosUsuario?.deseo || "seguir").trim();
-
-  let texto =
-`${perfil.tono === "oscuro" ? "La luz parece enferma.\n" : ""}Estás en ${lugar}. Objetivo: ${estado.objetivo}.
-Fase: ${faseKey.toUpperCase()}.
-
-Ocurre: ${eventoLocal}.
-Sientes que ${amenaza} está cerca.
-Tu miedo (${miedo}) aparece, pero piensas en ${deseo}.`;
-
-  if (eventoGlobal) {
-    texto += `\n\nEVENTO EXTRA: ${eventoGlobal}.`;
-    pushFlag(estado, `Evento extra: ${eventoGlobal}`);
-  }
-
-  texto += `
-
-Estado: salud=${estado.salud}, tension=${estado.tension}, misterio=${estado.misterio}, valor=${estado.valor}
-Inventario: ${(estado.inventario || []).join(", ") || "vacío"}
-Flags: ${logFlags || "ninguna"}
-Memoria: ${memoria}`;
-
-  let opciones = opcionesBase({ estado, perfil, riesgo });
-
-  // normaliza impactos
+function normalizarImpactos(opciones) {
   opciones.forEach(o => {
     o.impacto = o.impacto || {};
     if (o.impacto.tension != null) o.impacto.tension = clamp(o.impacto.tension, -3, +3);
     if (o.impacto.salud != null) o.impacto.salud = clamp(o.impacto.salud, -2, +1);
-    if (o.impacto.misterio != null) o.impact
+    if (o.impacto.misterio != null
