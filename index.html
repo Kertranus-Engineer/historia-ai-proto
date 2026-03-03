@@ -1,4 +1,3 @@
-<!-- index.html (REEMPLAZA TODO por esto) -->
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -55,16 +54,29 @@
         alt="Escena"
         style="width:100%; max-width:900px; border-radius:12px; margin-bottom:16px;"
       />
+
       <pre id="texto" class="story"></pre>
-      <div id="opciones" class="options"></div>
+
+      <details style="margin-top:14px; opacity:.9;">
+        <summary>Prompt visual (debug)</summary>
+        <pre id="promptVisual" class="story" style="white-space:pre-wrap;"></pre>
+      </details>
+
+      <details style="margin-top:10px; opacity:.9;">
+        <summary>Estado / debug</summary>
+        <pre id="debugEstado" class="story" style="white-space:pre-wrap;"></pre>
+      </details>
+
+      <div id="opciones" class="options" style="margin-top:16px;"></div>
     </div>
 
-    <!-- sonidos opcionales -->
+    <!-- sonidos opcionales: si no los tienes, mejor no los cargues -->
+    <!--
     <audio id="sfxClick" src="click.mp3" preload="auto"></audio>
     <audio id="sfxDanger" src="danger.mp3" preload="auto"></audio>
+    -->
   </div>
 
-  <!-- IMPORTANTE: script como módulo -->
   <script type="module" src="./script.js"></script>
 </body>
 </html>
