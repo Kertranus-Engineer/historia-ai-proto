@@ -126,20 +126,38 @@ Memoria: ${resumenMemoriaCorta(estado)}
     irIntro();
   });
   cont.appendChild(b3);
-}
-
 function elegir(i) {
   if (!escenaActual) return;
   const op = escenaActual.opciones[i];
   if (!op) return;
 
-  // snapshot mínimo de memoria narrativa
-  pushMemoria(estado, `Evento: ${escenaActual.texto.split("\n")[0]}`);
+  // memoria
+  pushMemoria(estado, `Fase: ${escenaActual.meta?.faseKey || "?"}`);
+  pushMemoria(estado, `Ocurre: ${escenaActual.meta?.evento || "evento"}`);
   pushMemoria(estado, `Elegiste: ${op.texto}`);
 
+  // impactos
   aplicarImpacto(estado, op.impacto);
 
-  // siguiente escena
+  // consume item
+  if (op.consume) {
+    estado.inventario = estado.inventario.filter(x => x !== op.consume);
+    estado.flags.log = estado.flags.log || [];
+    estado.flags.log.push(`Consumiste: ${op.consume}`);
+  }
+
+  // set flag
+  if (op.flagSet) {
+    estado.flags[op.flagSet] = true;
+    estado.flags.log = estado.flags.log || [];
+    estado.flags.log.push(`Flag: ${op.flagSet}`);
+  }
+
+  // efecto opcional (si viene)
+  if (typeof op.efecto === "function") {
+    op.efecto(estado);
+  }
+
   render();
 }
 
@@ -202,3 +220,4 @@ window.addEventListener("DOMContentLoaded", () => {
   const saved = cargar();
   if (btnCont) btnCont.disabled = !saved;
 });
+
